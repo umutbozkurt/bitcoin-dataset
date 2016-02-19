@@ -4,12 +4,9 @@ from signals import Ticker, Trades, Transactions, OrderBook
 import threading
 import datetime
 import logging
-import time
 
 
-logging.basicConfig(filename='collector.log',
-                    level=logging.INFO,
-                    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 lock = threading.Lock()
 
 
@@ -57,11 +54,12 @@ class BTCCollector(object):
         update_trade_for_transactions(message)
 
 
-Ticker.subscribe(BTCCollector.ticker_callback)
-Trades.subscribe(BTCCollector.trades_callback)
-Transactions.subscribe(BTCCollector.transactions_callback)
-OrderBook.subscribe(BTCCollector.orders_callback)
+def start():
+    Ticker.subscribe(BTCCollector.ticker_callback)
+    Trades.subscribe(BTCCollector.trades_callback)
+    Transactions.subscribe(BTCCollector.transactions_callback)
+    OrderBook.subscribe(BTCCollector.orders_callback)
 
 
-while True:
-    time.sleep(1)
+if __name__ == '__main__':
+    start()
