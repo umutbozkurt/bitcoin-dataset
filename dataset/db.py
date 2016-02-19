@@ -1,9 +1,10 @@
 from cassandra.cluster import Cluster
-from cassandra.query import BatchStatement, ValueSequence
+from cassandra.policies import RetryPolicy
+from cassandra.query import ValueSequence, BatchStatement
 from cassandra import AlreadyExists
 
-
 import datetime
+import operator
 import logging
 
 
@@ -17,6 +18,13 @@ KEYSPACE = 'btc_short_dataset'
 session = None
 
 
+def get_field_set(items, getter=operator.attrgetter('id'), cast=int):
+    """
+    Get ids via getter and collect them in a set
+    """
+    return {cast(getter(item)) for item in items}
+
+
 def prepare_session():
     """
         - Create keyspace if not exists
@@ -28,30 +36,32 @@ def prepare_session():
 
     try:
         session = cluster.connect()
-        create_keyspace(session)
+        session = create_keyspace(session)
     except AlreadyExists:
-        session = cluster.connect(KEYSPACE)
+        log.info('Keyspace Exists, Passing')
+
+    session = cluster.connect(KEYSPACE)
 
     try:
         create_transactions_table(session)
     except AlreadyExists:
-        log.info('db exists, passing')
+        log.info('DB Exists, Passing')
 
     return session
 
 
 def create_keyspace(session):
-    log.info('creating keyspace')
+    log.info('Creating Keyspace `%s`' % KEYSPACE)
 
     session.execute("""
-        CREATE KEYSPACE %s WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '2'}
+        CREATE KEYSPACE %s WITH replication = {'class' : 'SimpleStrategy', 'replication_factor' : 2}
     """ % KEYSPACE)
 
     return session
 
 
 def create_transactions_table(session):
-    log.info('creating table')
+    log.info('Creating Table `transactions`')
 
     session.execute("""
         CREATE TABLE transactions(
@@ -68,10 +78,6 @@ def create_transactions_table(session):
             daily_volume float
         )
     """)
-
-
-def create_timestamp():
-    return int((datetime.datetime.now() - datetime.datetime(1970, 1, 1)).total_seconds())
 
 
 def insert_trade(tid, price, amount, asks, bids):
@@ -91,29 +97,39 @@ def insert_trade(tid, price, amount, asks, bids):
         db_bids.append([float(bid_price), float(bid_amount)])
 
     session.execute("""
-        INSERT INTO transactions(id, ts, price, amount, asks, bids)
-        VALUES(%s, %s, %s, %s, %s, %s)
-    """, (tid, create_timestamp(), price, amount, db_asks, db_bids))
+        INSERT INTO transactions(id, price, amount, asks, bids)
+        VALUES(%s, %s, %s, %s, %s)
+    """, parameters=(tid, price, amount, db_asks, db_bids))
 
 
 def update_trade_for_transactions(transactions):
     """
     Update trade's `sell` field from incoming transactions
+        - Cannot batch query with `IF EXISTS`
     """
-    log.info('Updating %s Transactions' % len(transactions))
+    transaction_ids = get_field_set(transactions, getter=operator.itemgetter('tid'))
+
+    result = session.execute("""
+        SELECT id
+        FROM transactions
+        WHERE id IN %s
+    """, parameters=[ValueSequence(transaction_ids)])
+
+    transaction_ids = get_field_set(result)
+    log.info('Updating `sell` `ts` fields for %s Transactions' % len(transaction_ids))
 
     update_trade_statement = session.prepare("""
         UPDATE transactions
-        SET sell = ?
+        SET sell = ?, ts = ?
         WHERE id = ?
     """)
 
-    batch = BatchStatement()
+    batch = BatchStatement(retry_policy=RetryPolicy.RETRY)
 
     for transaction in transactions:
-        tid, sell = transaction['tid'], transaction['type']
-        sell = bool(sell)
-        batch.add(update_trade_statement, (sell, tid))
+        tid, sell, ts = transaction['tid'], bool(transaction['type']), int(transaction['date'])
+        if tid in transaction_ids:
+            batch.add(update_trade_statement, parameters=(sell, datetime.datetime.fromtimestamp(ts), tid))
 
     session.execute(batch)
 
@@ -123,29 +139,19 @@ def update_trade_for_ticker(ticker, transaction_ids):
     Add daily values to trades
     """
     transaction_count = len(transaction_ids)
-    log.info('Updating Daily Values for %s object(s)' % transaction_count)
+    log.info('Updating `daily_*` fields for %s Transactions' % transaction_count)
 
-    query_body = """
-      UPDATE transactions
+    session.execute("""
+          UPDATE transactions
           SET daily_high = %s,
               daily_low = %s,
               daily_vwap = %s,
               daily_volume = %s
-    """
-
-    if transaction_count > 1:
-        session.execute(
-            query_body + ' WHERE id IN %s',
-            (ticker.daily_high, ticker.daily_low, ticker.daily_vwap,
-             ticker.daily_volume, ValueSequence(transaction_ids))
+          WHERE id IN %s
+        """, parameters=(
+            ticker.daily_high, ticker.daily_low, ticker.daily_vwap, ticker.daily_volume, ValueSequence(transaction_ids)
         )
-    elif transaction_count == 1:
-        session.execute(
-            query_body + ' WHERE id = %s',
-            (ticker.daily_high, ticker.daily_low, ticker.daily_vwap, ticker.daily_volume, transaction_ids[0])
-        )
-    else:
-        pass
+    )
 
 
 session = session or prepare_session()
