@@ -5,8 +5,8 @@ import threading
 import requests
 
 
-log = logging.getLogger()
-log.setLevel(logging.ERROR)
+log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s'))
 log.addHandler(handler)
@@ -66,8 +66,10 @@ class ObjectSignal(Signal):
         self.update_interval = None
 
     def fetch(self):
-        data = requests.get(self.source).json()
-        self.update(data)
+        response = requests.get(self.source)
+        response.raise_for_status()
+        self.update(response.json())
+        self.timer.start()  # Restart timer
 
     @classmethod
     def subscribe(cls, callback):
@@ -116,10 +118,10 @@ class Ticker(ObjectSignal):
     @classmethod
     def update(cls, message):
         instance = cls()
-        instance.daily_high = message['high']
-        instance.daily_low = message['low']
-        instance.daily_vwap = message['vwap']
-        instance.daily_volume = message['volume']
+        instance.daily_high = float(message['high'])
+        instance.daily_low = float(message['low'])
+        instance.daily_vwap = float(message['vwap'])
+        instance.daily_volume = float(message['volume'])
         instance.last_check_timestamp = int(message['timestamp'])
 
         cls.publish(instance)
@@ -132,7 +134,7 @@ class Transactions(ObjectSignal):
     """
     def __init__(self):
         super(Transactions, self).__init__()
-        self.source = 'https://www.bitstamp.net/api/transactions/?time=minute'
+        self.source = 'https://www.bitstamp.net/api/transactions/?time=hour'
         self.update_interval = 60
 
 
@@ -146,6 +148,6 @@ def connection_handler(data):
     live_trades.bind('trade', Trades.update)
 
 
-pusher = pusherclient.Pusher('de504dc5763aeef9ff52', log_level=logging.ERROR)
+pusher = pusherclient.Pusher('de504dc5763aeef9ff52', log_level=logging.WARNING)
 pusher.connection.bind('pusher:connection_established', connection_handler)
 pusher.connect()
