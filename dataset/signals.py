@@ -107,7 +107,7 @@ class Ticker(ObjectSignal):
         super(Ticker, self).__init__()
 
         self.source = 'https://www.bitstamp.net/api/ticker/'
-        self.update_interval = 10
+        self.update_interval = 5
 
         self.last_check_timestamp = None
         self.daily_high = None
