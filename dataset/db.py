@@ -129,7 +129,7 @@ def update_trade_for_transactions(transactions):
     for transaction in transactions:
         tid, sell, ts = transaction['tid'], bool(transaction['type']), int(transaction['date'])
         if tid in transaction_ids:
-            batch.add(update_trade_statement, parameters=(sell, datetime.datetime.fromtimestamp(ts), tid))
+            batch.add(update_trade_statement, parameters=(sell, datetime.datetime.utcfromtimestamp(ts), tid))
 
     session.execute(batch)
 
