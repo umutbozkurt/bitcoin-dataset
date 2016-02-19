@@ -5,7 +5,8 @@ import threading
 import requests
 
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+logging.basicConfig(filename='signals.log', level=logging.INFO,
+                    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 
 
 class Singleton(type):

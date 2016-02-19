@@ -4,9 +4,11 @@ from signals import Ticker, Trades, Transactions, OrderBook
 import threading
 import datetime
 import logging
+import time
 
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+logging.basicConfig(filename='collector.log', level=logging.INFO,
+                    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 lock = threading.Lock()
 
 
@@ -63,3 +65,7 @@ def start():
 
 if __name__ == '__main__':
     start()
+
+
+while True:
+    time.sleep(1)
