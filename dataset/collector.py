@@ -7,12 +7,9 @@ import logging
 import time
 
 
-log = logging.getLogger('collector')
-log.setLevel(logging.INFO)
-handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s'))
-log.addHandler(handler)
-
+logging.basicConfig(filename='collector.log',
+                    level=logging.INFO,
+                    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 lock = threading.Lock()
 
 
@@ -25,7 +22,7 @@ class BTCCollector(object):
 
     @classmethod
     def trades_callback(cls, message):
-        log.info('New Trade | %s: %s @ %s' % (message['id'], message['amount'], message['price']))
+        logging.info('New Trade | %s: %s @ %s' % (message['id'], message['amount'], message['price']))
 
         insert_trade(
             tid=message['id'],
@@ -44,7 +41,7 @@ class BTCCollector(object):
 
     @classmethod
     def ticker_callback(cls, message):
-        log.debug('New Ticker | High %s - Low %s' % (message.daily_high, message.daily_low))
+        logging.debug('New Ticker | High %s - Low %s' % (message.daily_high, message.daily_low))
 
         update_trade_for_ticker(message, cls.last_ticker_transaction_ids)
 
@@ -55,7 +52,7 @@ class BTCCollector(object):
     def transactions_callback(cls, message):
         beginning = datetime.datetime.fromtimestamp(float(message[-1]['date']))
         end = datetime.datetime.fromtimestamp(float(message[0]['date']))
-        log.debug('New Transactions | From %s To %s' % (beginning.strftime('%H:%M'), end.strftime('%H:%M')))
+        logging.debug('New Transactions | From %s To %s' % (beginning.strftime('%H:%M'), end.strftime('%H:%M')))
 
         update_trade_for_transactions(message)
 

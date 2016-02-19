@@ -8,11 +8,9 @@ import operator
 import logging
 
 
-log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
-handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s'))
-log.addHandler(handler)
+logging.basicConfig(filename='collector.log',
+                    level=logging.INFO,
+                    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 
 KEYSPACE = 'btc_short_dataset'
 session = None
@@ -38,20 +36,20 @@ def prepare_session():
         session = cluster.connect()
         session = create_keyspace(session)
     except AlreadyExists:
-        log.info('Keyspace Exists, Passing')
+        logging.info('Keyspace Exists, Passing')
 
     session = cluster.connect(KEYSPACE)
 
     try:
         create_transactions_table(session)
     except AlreadyExists:
-        log.info('DB Exists, Passing')
+        logging.info('DB Exists, Passing')
 
     return session
 
 
 def create_keyspace(session):
-    log.info('Creating Keyspace `%s`' % KEYSPACE)
+    logging.info('Creating Keyspace `%s`' % KEYSPACE)
 
     session.execute("""
         CREATE KEYSPACE %s WITH replication = {'class' : 'SimpleStrategy', 'replication_factor' : 2}
@@ -61,7 +59,7 @@ def create_keyspace(session):
 
 
 def create_transactions_table(session):
-    log.info('Creating Table `transactions`')
+    logging.info('Creating Table `transactions`')
 
     session.execute("""
         CREATE TABLE transactions(
@@ -84,7 +82,7 @@ def insert_trade(tid, price, amount, asks, bids):
     """
     Insert trade to db with incoming trade data
     """
-    log.info('Inserting Trade - %s' % tid)
+    logging.info('Inserting Trade - %s' % tid)
 
     db_asks = []
     for ask in asks:
@@ -116,7 +114,7 @@ def update_trade_for_transactions(transactions):
     """, parameters=[ValueSequence(transaction_ids)])
 
     transaction_ids = get_field_set(result)
-    log.info('Updating `sell` `ts` fields for %s Transactions' % len(transaction_ids))
+    logging.info('Updating `sell` `ts` fields for %s Transactions' % len(transaction_ids))
 
     update_trade_statement = session.prepare("""
         UPDATE transactions
@@ -139,7 +137,7 @@ def update_trade_for_ticker(ticker, transaction_ids):
     Add daily values to trades
     """
     transaction_count = len(transaction_ids)
-    log.info('Updating `daily_*` fields for %s Transactions' % transaction_count)
+    logging.info('Updating `daily_*` fields for %s Transactions' % transaction_count)
 
     session.execute("""
           UPDATE transactions

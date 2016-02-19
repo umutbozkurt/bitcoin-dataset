@@ -5,11 +5,9 @@ import threading
 import requests
 
 
-log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
-handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s'))
-log.addHandler(handler)
+logging.basicConfig(filename='signals.log',
+                    level=logging.INFO,
+                    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 
 
 class Singleton(type):
@@ -37,6 +35,7 @@ class Signal(object):
 
     @classmethod
     def update(cls, message):
+        logging.info('Received message: %s' % cls.__name__)
         raise NotImplementedError('You need to implement `update(cls, message=None) for class %s' % cls)
 
     @classmethod
