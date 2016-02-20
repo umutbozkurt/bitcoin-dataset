@@ -65,7 +65,7 @@ class ObjectSignal(Signal):
         self.timer = None
 
     def fetch(self):
-        response = requests.get(self.source)
+        response = requests.get(self.source, verify=False)
         response.raise_for_status()
         self.update(response.json())
         self.restart_timer()
