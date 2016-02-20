@@ -43,7 +43,12 @@ def prepare_session():
     try:
         create_transactions_table(session)
     except AlreadyExists:
-        logging.info('DB Exists, Passing')
+        logging.info('Transactions Table Exists, Passing')
+
+    try:
+        create_stats_table(session)
+    except AlreadyExists:
+        logging.info('Stats Table Exists, Passing')
 
     return session
 
@@ -78,6 +83,18 @@ def create_transactions_table(session):
     """)
 
 
+def create_stats_table(session):
+    logging.info('Creating Table `stats`')
+
+    session.execute("""
+        CREATE TABLE stats(
+            t_name ascii PRIMARY KEY,
+            inserted_rows counter,
+            null_containing_rows counter
+        )
+    """)
+
+
 def insert_trade(tid, price, amount, asks, bids):
     """
     Insert trade to db with incoming trade data
@@ -98,6 +115,27 @@ def insert_trade(tid, price, amount, asks, bids):
         INSERT INTO transactions(id, price, amount, asks, bids)
         VALUES(%s, %s, %s, %s, %s)
     """, parameters=(tid, price, amount, db_asks, db_bids))
+
+
+def update_stat(inserted_rows, null_rows):
+    """
+    Insert statistics table
+    """
+    logging.info('Inserting Statistics')
+
+    session.execute("""
+        UPDATE stats
+        SET inserted_rows = inserted_rows + %s, null_containing_rows = null_containing_rows + %s
+        WHERE t_name = 'transactions'
+    """, parameters=(int(inserted_rows), int(null_rows)))
+
+
+def get_statistics():
+    results = session.execute("""
+        SELECT inserted_rows, null_containing_rows, WRITETIME(null_containing_rows) FROM stats
+    """)
+
+    return results[-1]
 
 
 def update_trade_for_transactions(transactions):

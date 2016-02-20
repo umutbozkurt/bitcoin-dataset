@@ -34,7 +34,7 @@ class Signal(object):
 
     @classmethod
     def update(cls, message):
-        logging.info('Received message: %s' % cls.__name__)
+        logging.debug('Received message: %s' % cls.__name__)
         raise NotImplementedError('You need to implement `update(cls, message=None) for class %s' % cls)
 
     @classmethod
@@ -62,24 +62,25 @@ class ObjectSignal(Signal):
         super(ObjectSignal, self).__init__()
         self.source = None
         self.update_interval = None
+        self.timer = None
 
     def fetch(self):
         response = requests.get(self.source)
         response.raise_for_status()
         self.update(response.json())
-        self.timer.start()  # Restart timer
+        self.restart_timer()
 
     @classmethod
     def subscribe(cls, callback):
         super(ObjectSignal, cls).subscribe(callback)
-        cls().timer.start()
+        cls().restart_timer()
 
     def update(self, message):
         self.publish(message)
 
-    @property
-    def timer(self):
-        return threading.Timer(self.update_interval, self.fetch)
+    def restart_timer(self):
+        self.timer = threading.Timer(self.update_interval, self.fetch)
+        self.timer.start()
 
 
 class OrderBook(JSONSignal):
