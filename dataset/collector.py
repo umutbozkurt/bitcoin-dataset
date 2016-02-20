@@ -19,6 +19,7 @@ class BTCCollector(object):
     """
     latest_orders = None
     last_ticker_transaction_ids = []
+    ticker_trigger = 3  # Trigger ticker manually on every 3 trade
 
     @classmethod
     def trades_callback(cls, message):
@@ -36,6 +37,9 @@ class BTCCollector(object):
 
         with lock:
             cls.last_ticker_transaction_ids.append(message['id'])
+
+        if len(cls.last_ticker_transaction_ids) > cls.ticker_trigger:
+            Ticker().fetch()
 
     @classmethod
     def orders_callback(cls, message):

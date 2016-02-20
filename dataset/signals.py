@@ -106,7 +106,7 @@ class Ticker(ObjectSignal):
         super(Ticker, self).__init__()
 
         self.source = 'https://www.bitstamp.net/api/ticker/'
-        self.update_interval = 5
+        self.update_interval = 30
 
         self.last_check_timestamp = None
         self.daily_high = None
@@ -134,7 +134,7 @@ class Transactions(ObjectSignal):
     def __init__(self):
         super(Transactions, self).__init__()
         self.source = 'https://www.bitstamp.net/api/transactions/?time=hour'
-        self.update_interval = 60
+        self.update_interval = 60 * 2
 
 
 def connection_handler(data):
