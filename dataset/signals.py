@@ -3,6 +3,7 @@ import json
 import logging
 import threading
 import requests
+import notifier
 
 
 logging.basicConfig(filename='signals.log', level=logging.INFO,
@@ -62,11 +63,20 @@ class ObjectSignal(Signal):
         super(ObjectSignal, self).__init__()
         self.source = None
         self.update_interval = None
+        self.failure_retry_seconds = 2
         self.timer = None
 
     def fetch(self):
-        response = requests.get(self.source, verify=False)
-        response.raise_for_status()
+        try:
+            response = requests.get(self.source)
+        except requests.ConnectionError:
+            return self.restart_timer(retry=True)
+
+        try:
+            response.raise_for_status()
+        except requests.HTTPError:
+            return notifier.notify('Bad Response: HTTP %s' % response.status_code, response.content)
+
         self.update(response.json())
         self.restart_timer()
 
@@ -78,8 +88,9 @@ class ObjectSignal(Signal):
     def update(self, message):
         self.publish(message)
 
-    def restart_timer(self):
-        self.timer = threading.Timer(self.update_interval, self.fetch)
+    def restart_timer(self, retry=False):
+        interval = self.failure_retry_seconds if retry else self.update_interval
+        self.timer = threading.Timer(interval, self.fetch)
         self.timer.start()
 
 

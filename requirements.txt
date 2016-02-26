@@ -1,6 +1,7 @@
-cassandra-driver
 lz4
 websocket-client
 pusherclient
 requests
+psycopg2
+records
 boto3

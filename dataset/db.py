@@ -1,19 +1,15 @@
-from cassandra.cluster import Cluster
-from cassandra.policies import RetryPolicy
-from cassandra.query import ValueSequence, BatchStatement
-from cassandra import AlreadyExists
-
-import datetime
+import records
 import operator
 import logging
 
+from sqlalchemy.exc import ProgrammingError
 
 logging.basicConfig(filename='collector.log',
                     level=logging.INFO,
                     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 
-KEYSPACE = 'btc_short_dataset'
-session = None
+
+db = records.Database()
 
 
 def get_field_set(items, getter=operator.attrgetter('id'), cast=int):
@@ -25,56 +21,32 @@ def get_field_set(items, getter=operator.attrgetter('id'), cast=int):
 
 def prepare_session():
     """
-        - Create keyspace if not exists
-        - Create table if not exists
         - Open a session
+        - Create table if not exists
     """
-    cluster = Cluster()
-    global session
-
     try:
-        session = cluster.connect()
-        session = create_keyspace(session)
-    except AlreadyExists:
-        logging.info('Keyspace Exists, Passing')
-
-    session = cluster.connect(KEYSPACE)
-
-    try:
-        create_transactions_table(session)
-    except AlreadyExists:
+        create_transactions_table()
+    except ProgrammingError:
         logging.info('Transactions Table Exists, Passing')
 
     try:
-        create_stats_table(session)
-    except AlreadyExists:
+        create_stats_table()
+    except ProgrammingError:
         logging.info('Stats Table Exists, Passing')
 
-    return session
 
-
-def create_keyspace(session):
-    logging.info('Creating Keyspace `%s`' % KEYSPACE)
-
-    session.execute("""
-        CREATE KEYSPACE %s WITH replication = {'class' : 'SimpleStrategy', 'replication_factor' : 2}
-    """ % KEYSPACE)
-
-    return session
-
-
-def create_transactions_table(session):
+def create_transactions_table():
     logging.info('Creating Table `transactions`')
 
-    session.execute("""
+    db.query("""
         CREATE TABLE transactions(
             id int PRIMARY KEY,
             ts timestamp,
             price float,
             amount float,
             sell boolean,
-            asks frozen <list<list<float>>>,
-            bids frozen <list<list<float>>>,
+            asks float[][],
+            bids float[][],
             daily_high float,
             daily_low float,
             daily_vwap float,
@@ -83,15 +55,21 @@ def create_transactions_table(session):
     """)
 
 
-def create_stats_table(session):
+def create_stats_table():
     logging.info('Creating Table `stats`')
 
-    session.execute("""
+    db.query("""
         CREATE TABLE stats(
-            t_name ascii PRIMARY KEY,
-            inserted_rows counter,
-            null_containing_rows counter
+            t_name varchar(20) PRIMARY KEY,
+            inserted_rows int ,
+            null_containing_rows int,
+            updated_at timestamp with time zone
         )
+    """)
+
+    db.query("""
+        INSERT INTO stats(t_name, inserted_rows, null_containing_rows, updated_at)
+        VALUES('transactions', 0, 0, to_timestamp(extract(epoch from now())))
     """)
 
 
@@ -111,10 +89,10 @@ def insert_trade(tid, price, amount, asks, bids):
         bid_price, bid_amount = bid
         db_bids.append([float(bid_price), float(bid_amount)])
 
-    session.execute("""
+    db.query("""
         INSERT INTO transactions(id, price, amount, asks, bids)
-        VALUES(%s, %s, %s, %s, %s)
-    """, parameters=(tid, price, amount, db_asks, db_bids))
+        VALUES(:id, :price, :amount, :asks, :bids)
+    """, id=tid, price=price, amount=amount, asks=db_asks, bids=db_bids)
 
 
 def update_stat(inserted_rows, null_rows):
@@ -123,19 +101,25 @@ def update_stat(inserted_rows, null_rows):
     """
     logging.info('Inserting Statistics')
 
-    session.execute("""
+    db.query("""
         UPDATE stats
-        SET inserted_rows = inserted_rows + %s, null_containing_rows = null_containing_rows + %s
+        SET
+        inserted_rows = inserted_rows + :inserted_rows,
+        null_containing_rows = null_containing_rows + :null_rows,
+        updated_at = to_timestamp(extract(epoch from now()))
         WHERE t_name = 'transactions'
-    """, parameters=(int(inserted_rows), int(null_rows)))
+    """, inserted_rows=int(inserted_rows), null_rows=int(null_rows))
 
 
 def get_statistics():
-    results = session.execute("""
-        SELECT inserted_rows, null_containing_rows, WRITETIME(null_containing_rows) FROM stats
+    results = db.query("""
+        SELECT inserted_rows, null_containing_rows, updated_at FROM stats
     """)
 
-    return results[-1]
+    try:
+        return results[-1]
+    except IndexError:
+        return None
 
 
 def update_trade_for_transactions(transactions):
@@ -143,31 +127,15 @@ def update_trade_for_transactions(transactions):
     Update trade's `sell` field from incoming transactions
         - Cannot batch query with `IF EXISTS`
     """
-    transaction_ids = get_field_set(transactions, getter=operator.itemgetter('tid'))
-
-    result = session.execute("""
-        SELECT id
-        FROM transactions
-        WHERE id IN %s
-    """, parameters=[ValueSequence(transaction_ids)])
-
-    transaction_ids = get_field_set(result)
-    logging.info('Updating `sell` `ts` fields for %s Transactions' % len(transaction_ids))
-
-    update_trade_statement = session.prepare("""
-        UPDATE transactions
-        SET sell = ?, ts = ?
-        WHERE id = ?
-    """)
-
-    batch = BatchStatement(retry_policy=RetryPolicy.RETRY)
+    logging.info('Updating `sell` `ts` fields for %s Transactions' % len(transactions))
 
     for transaction in transactions:
         tid, sell, ts = transaction['tid'], bool(transaction['type']), int(transaction['date'])
-        if tid in transaction_ids:
-            batch.add(update_trade_statement, parameters=(sell, datetime.datetime.utcfromtimestamp(ts), tid))
-
-    session.execute(batch)
+        db.query("""
+            UPDATE transactions
+            SET sell = :sell, ts = to_timestamp(:ts)
+            WHERE id = :id
+        """, sell=sell, ts=ts, id=tid)
 
 
 def update_trade_for_ticker(ticker, transaction_ids):
@@ -177,17 +145,18 @@ def update_trade_for_ticker(ticker, transaction_ids):
     transaction_count = len(transaction_ids)
     logging.info('Updating `daily_*` fields for %s Transactions' % transaction_count)
 
-    session.execute("""
-          UPDATE transactions
-          SET daily_high = %s,
-              daily_low = %s,
-              daily_vwap = %s,
-              daily_volume = %s
-          WHERE id IN %s
-        """, parameters=(
-            ticker.daily_high, ticker.daily_low, ticker.daily_vwap, ticker.daily_volume, ValueSequence(transaction_ids)
+    if transaction_count > 0:
+        db.query(
+            """UPDATE transactions
+            SET daily_high = :high,
+              daily_low = :low,
+              daily_vwap = :vwap,
+              daily_volume = :volume
+            WHERE id IN :id_list""",
+            high=ticker.daily_high,
+            low=ticker.daily_low,
+            vwap=ticker.daily_vwap,
+            volume=ticker.daily_volume,
+            id_list=tuple(transaction_ids)
         )
-    )
 
-
-session = session or prepare_session()
