@@ -1,7 +1,7 @@
 lz4
 websocket-client
 pusherclient
-requests
+requests[security]
 psycopg2
 records
 boto3
