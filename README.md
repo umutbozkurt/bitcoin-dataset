@@ -23,7 +23,7 @@ for each trade.
 - Create a virtualenv, preferably
 - Install requirements
   - Install Postgres
-  - Install Python packages pip install --upgrade -r requirements.txt
+  - Install Python packages `pip install --upgrade -r requirements.txt`
 - Create a `secret.env` for secret keys and configuration
   - `DATABASE_URL`, should look like this `postgres://<USER>:<PASSWORD>@127.0.0.1:5432/<DB_NAME>`
   - [AWS Environment variables](http://boto3.readthedocs.org/en/latest/guide/configuration.html#environment-variables)
