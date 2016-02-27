@@ -90,7 +90,10 @@ class ObjectSignal(Signal):
 
     def restart_timer(self, retry=False):
         interval = self.failure_retry_seconds if retry else self.update_interval
-        self.timer.cancel()
+
+        if self.timer:
+            self.timer.cancel()
+
         self.timer = threading.Timer(interval, self.fetch)
         self.timer.start()
 
