@@ -2,7 +2,7 @@
 
 Collector uses [Bitsamp](https://bitstamp.net) as a datasource, gathers market data.
 
-Collecting:
+###Collecting:
 
 - Timestamp
 - Price 
