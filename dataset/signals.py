@@ -1,12 +1,11 @@
 import pusherclient
 import json
 import logging
-import threading
 import requests
 import notifier
 
 
-logging.basicConfig(filename='signals.log', level=logging.INFO,
+logging.basicConfig(filename='collector.log', level=logging.INFO,
                     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 
 
@@ -68,8 +67,9 @@ class ObjectSignal(Signal):
     def fetch(self):
         try:
             response = requests.get(self.source)
-        except requests.ConnectionError:
-            return self.start_timer(retry=True)
+        except requests.ConnectionError as exc:
+            logging.ERROR('Cannot connect - Connection error %s' % exc.message)
+            return
 
         try:
             response.raise_for_status()
@@ -77,8 +77,6 @@ class ObjectSignal(Signal):
             return notifier.notify('Bad Response: HTTP %s' % response.status_code, response.content)
         else:
             self.update(response.json())
-        finally:
-            self.start_timer()
 
     @classmethod
     def subscribe(cls, callback):
@@ -88,9 +86,9 @@ class ObjectSignal(Signal):
     def update(self, message):
         self.publish(message)
 
-    def start_timer(self, retry=False):
-        interval = self.failure_retry_seconds if retry else self.update_interval
-        threading.Timer(interval, self.fetch).start()
+    # def start_timer(self, retry=False):
+    #     interval = self.failure_retry_seconds if retry else self.update_interval
+    #     threading.Timer(interval, self.fetch).start()
 
 
 class OrderBook(JSONSignal):
