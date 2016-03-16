@@ -1,3 +1,4 @@
+from dataset.notifier import notify
 from db import (insert_trade, update_trade_for_transactions, update_trade_for_ticker, get_statistics, update_stat,
                 prepare_session)
 from signals import Ticker, Trades, Transactions, OrderBook
@@ -11,6 +12,10 @@ import time
 logging.basicConfig(filename='collector.log', level=logging.INFO,
                     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 lock = threading.Lock()
+
+timer = 0  # python Timer is bad. this int will act like a timer
+timer_reset = 1  # this is the reset threshold
+stats_interval = 60 * 60 * 6  # Every 6 hours
 
 
 class BTCCollector(object):
@@ -64,6 +69,16 @@ class BTCCollector(object):
         update_trade_for_transactions(message)
 
 
+def send_status_notification():
+    stats = get_statistics()
+
+    if stats:
+        message = 'Total: %s | Null Containing: %s | Last Update: %s' % (stats.inserted_rows,
+                                                                         stats.null_containing_rows,
+                                                                         stats.updated_at.strftime('%H:%M'))
+        notify('Collector Statistics', message)
+
+
 def start():
     Ticker.subscribe(BTCCollector.ticker_callback)
     Trades.subscribe(BTCCollector.trades_callback)
@@ -75,5 +90,21 @@ if __name__ == '__main__':
     prepare_session()
     start()
 
+    timer_reset = Transactions().update_interval * Ticker().update_interval * stats_interval
+
     while True:
+        # Implement a basic timer with integers since python timer does not work properly
         time.sleep(1)
+        timer += 1
+
+        if timer % Transactions().update_interval == 0:
+            Transactions().fetch()
+
+        if timer % Ticker().update_interval == 0:
+            Ticker().fetch()
+
+        if timer % stats_interval == 0:
+            send_status_notification()
+
+        if timer % timer_reset == 0:
+            timer = 0

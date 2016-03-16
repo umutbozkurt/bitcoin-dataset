@@ -83,7 +83,7 @@ class ObjectSignal(Signal):
     @classmethod
     def subscribe(cls, callback):
         super(ObjectSignal, cls).subscribe(callback)
-        cls().start_timer()
+        #  cls().start_timer()   -> this is obsolete now since python timer is not working
 
     def update(self, message):
         self.publish(message)
@@ -110,13 +110,13 @@ class Trades(JSONSignal):
 class Ticker(ObjectSignal):
     """
     Live Ticker object, signal
-        - refreshes every 10 seconds
+        - refreshes every 20 seconds
     """
     def __init__(self):
         super(Ticker, self).__init__()
 
         self.source = 'https://www.bitstamp.net/api/ticker/'
-        self.update_interval = 30
+        self.update_interval = 20
 
         self.last_check_timestamp = None
         self.daily_high = None
@@ -144,7 +144,7 @@ class Transactions(ObjectSignal):
     def __init__(self):
         super(Transactions, self).__init__()
         self.source = 'https://www.bitstamp.net/api/transactions/?time=hour'
-        self.update_interval = 60 * 2
+        self.update_interval = 60
 
 
 def connection_handler(data):
