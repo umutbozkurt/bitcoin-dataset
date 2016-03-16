@@ -1,4 +1,4 @@
-from dataset.notifier import notify
+from notifier import notify
 from db import (insert_trade, update_trade_for_transactions, update_trade_for_ticker, get_statistics, update_stat,
                 prepare_session)
 from signals import Ticker, Trades, Transactions, OrderBook
