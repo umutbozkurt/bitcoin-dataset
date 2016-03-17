@@ -64,19 +64,23 @@ class ObjectSignal(Signal):
         self.update_interval = None
         self.failure_retry_seconds = 2
 
-    def fetch(self):
+    def fetch(self, retry_count=0):
         try:
             response = requests.get(self.source)
         except requests.ConnectionError as exc:
-            logging.ERROR('Cannot connect - Connection error %s' % exc.message)
-            return
-
-        try:
-            response.raise_for_status()
-        except requests.HTTPError:
-            return notifier.notify('Bad Response: HTTP %s' % response.status_code, response.content)
+            logging.error('Cannot connect - Connection error %s' % exc.message)
+            if retry_count >= 0:
+                return self.fetch(retry_count=retry_count - 1)
         else:
-            self.update(response.json())
+            try:
+                response.raise_for_status()
+            except requests.HTTPError:
+                if retry_count >= 0:
+                    return self.fetch(retry_count=retry_count - 1)
+                else:
+                    return notifier.notify('Bad Response: HTTP %s' % response.status_code, response.content)
+            else:
+                self.update(response.json())
 
     @classmethod
     def subscribe(cls, callback):
