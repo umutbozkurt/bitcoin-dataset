@@ -1,8 +1,7 @@
 from notifier import notify
 from db import (insert_trade, update_trade_for_transactions, update_trade_for_ticker, get_statistics, update_stat,
                 prepare_session)
-from signals import Ticker, Trades, Transactions, OrderBook
-
+from signals import Ticker, Trades, Transactions, OrderBook, TransactionsBackup
 import threading
 import datetime
 import logging
@@ -14,7 +13,7 @@ logging.basicConfig(filename='collector.log', level=logging.INFO,
 lock = threading.Lock()
 
 timer = 0  # python Timer is bad. this int will act like a timer
-stats_interval = 60 * 60 * 6  # Every 6 hours
+stats_interval = 60 * 60 * 3  # Every 3 hours
 
 
 class BTCCollector(object):
@@ -82,8 +81,8 @@ def start():
     Ticker.subscribe(BTCCollector.ticker_callback)
     Trades.subscribe(BTCCollector.trades_callback)
     Transactions.subscribe(BTCCollector.transactions_callback)
+    TransactionsBackup.subscribe(BTCCollector.transactions_callback)
     OrderBook.subscribe(BTCCollector.orders_callback)
-
 
 if __name__ == '__main__':
     prepare_session()
@@ -97,7 +96,7 @@ if __name__ == '__main__':
         timer += 1
 
         if timer % Transactions().update_interval == 0:
-            Transactions().fetch()
+            Transactions().fetch(retry_count=3)
 
         if timer % Ticker().update_interval == 0:
             Ticker().fetch()
@@ -105,3 +104,4 @@ if __name__ == '__main__':
         if timer % timer_reset == 0:
             timer = 0
             send_status_notification()
+            TransactionsBackup().fetch(retry_count=3)
