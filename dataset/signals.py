@@ -154,7 +154,7 @@ class TransactionsBackup(ObjectSignal):
     Transactions Signal for Backup (Daily)
     """
     def __init__(self):
-        super(Transactions, self).__init__()
+        super(TransactionsBackup, self).__init__()
         self.source = 'https://www.bitstamp.net/api/transactions/?time=day'
         self.update_interval = 60 * 60 * 3  # Every 3 hours
 
