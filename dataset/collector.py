@@ -14,7 +14,6 @@ logging.basicConfig(filename='collector.log', level=logging.INFO,
 lock = threading.Lock()
 
 timer = 0  # python Timer is bad. this int will act like a timer
-timer_reset = 1  # this is the reset threshold
 stats_interval = 60 * 60 * 6  # Every 6 hours
 
 
@@ -90,7 +89,7 @@ if __name__ == '__main__':
     prepare_session()
     start()
 
-    timer_reset = Transactions().update_interval * Ticker().update_interval * stats_interval
+    timer_reset = stats_interval
 
     while True:
         # Implement a basic timer with integers since python timer does not work properly
@@ -103,8 +102,6 @@ if __name__ == '__main__':
         if timer % Ticker().update_interval == 0:
             Ticker().fetch()
 
-        if timer % stats_interval == 0:
-            send_status_notification()
-
         if timer % timer_reset == 0:
             timer = 0
+            send_status_notification()
